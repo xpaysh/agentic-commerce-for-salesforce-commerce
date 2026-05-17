@@ -1,47 +1,113 @@
-# Agentic Commerce for Salesforce Commerce Cloud
+# agentic-commerce-for-salesforce-commerce
 
-Multi-protocol agentic-commerce layer for [Salesforce B2C Commerce Cloud](https://www.salesforce.com/products/commerce-cloud/) (formerly Demandware). Speaks **[ACP](https://github.com/agentic-commerce-protocol/agentic-commerce-protocol)**, **[UCP](https://github.com/Universal-Commerce-Protocol/ucp)**, and **[AP2](https://github.com/google-agentic-commerce/AP2)** out of the box, emits real-standard discovery files (`/llms.txt`, schema.org JSON-LD, real-AI-crawler `robots.txt`), and settles through your existing B2C Commerce payment integration — cards, [Stripe MPP](https://mpp.dev), [x402](https://x402.org), stablecoins.
+**Multi-protocol agentic-commerce layer for [Salesforce B2C Commerce Cloud](https://www.salesforce.com/products/commerce-cloud/) (formerly Demandware).** Speaks ACP, UCP, AP2; emits real-standard discovery files; signed-JWT cart-deeplinks; rail-agnostic.
 
-> Scaffold for the [`agentic-commerce-for-*`](https://github.com/xpaysh?q=agentic-commerce-for-) family. Full implementation lands in coming weeks alongside the [plugin template](https://github.com/xpaysh/agentic-commerce-plugin-template).
+Runs as a Node sidecar talking to SFCC over the OCAPI Shop API. Implements [`@xpaysh/adapter-contract`](https://www.npmjs.com/package/@xpaysh/adapter-contract) — same contract as every sibling in the family.
 
-## What this gives a B2C Commerce merchant
+> v0.1 ships as a **Node sidecar** against OCAPI Shop API. v0.2 adds an SFRA (Storefront Reference Architecture) **B2C cartridge** that emits discovery files directly from the storefront and signs attribution tokens at order placement.
 
-- **Agent-readable storefront** — your B2C Commerce catalog gets exposed to ChatGPT, Claude, Gemini, and Perplexity via [llms.txt](https://llmstxt.org), schema.org JSON-LD on PDPs and search-result pages, and a `robots.txt` allowlist for real AI crawlers.
-- **Multi-protocol checkout endpoints** — ACP `POST /checkout_sessions` + `/delegate_payment` backed by [OCAPI](https://documentation.b2c.commercecloud.salesforce.com/DOC1/index.jsp?topic=%2Fcom.demandware.dochelp%2FOCAPI%2Fcurrent%2Fusage%2FOCAPI.html) / [SCAPI](https://developer.salesforce.com/docs/commerce/commerce-api/overview) basket and order resources; UCP REST surface with [RFC 9421](https://datatracker.ietf.org/doc/rfc9421/) signed-request verification; AP2 mandate acceptance.
-- **No new processor.** Agents settle through your existing B2C Commerce payment integration (Stripe, Adyen, PayPal, CyberSource, Braintree, …). Optional MPP / x402 / stablecoin rails are configurable.
-- **Cart deeplinks** — JWT-signed (commercial mode) or query-string (standalone) — pre-fill an SCAPI basket and redirect the buyer to your existing checkout.
-- **Two-mode operation** — *standalone* (no xpay backend) or *commercial* (xpay backend adds catalog hosting, attribution, multi-region analytics).
+## What v0.1 ships
 
-## Distribution shape
+### Discovery
 
-Salesforce B2C Commerce uses a cartridge model — proprietary scripting layered on top of SFRA (Storefront Reference Architecture) or PWA Kit. This repo ships as:
+| Path | Standard |
+|---|---|
+| `GET /llms.txt` | [llmstxt.org](https://llmstxt.org) |
+| `GET /.well-known/ucp` | UCP profile |
+| `GET /.well-known/oauth-protected-resource` | RFC 9728 (opt-in) |
+| `GET /.well-known/agent-card.json` | A2A 1.0 (opt-in) |
+| `GET /robots.txt` | RFC 9309 + AI-bot allowlist |
+| `GET /api/v1/jsonld/product/:id` | schema.org JSON-LD |
 
-- **B2C Commerce Cartridge** — installable cartridge added to the merchant's cartridge path; works with SFRA storefronts.
-- **PWA Kit extension** — headless React adapter for stores on Salesforce's PWA Kit (which is JS-native; reuses the shared template directly).
-- **LINK Marketplace listing** — Salesforce's partner-distributed extension catalog.
+### Protocols
+
+- **UCP**: catalog search/lookup, basket CRUD, checkout handoff
+- **ACP**: `checkout_sessions` create / get / update / complete
+- **AP2**: structural mandate verification, mandate-bound checkout
+
+### Cart handoff
+
+`GET /cart/deeplink?token=<jwt>` redeems an HS256-signed JWT and lands the agent on the storefront's Cart-Show with a pre-filled SFCC basket.
+
+## Capabilities
 
 ```
-   AI Agent  ───►  Salesforce B2C Commerce store  ───►  OCAPI / SCAPI
-                  (ACP / UCP / AP2 endpoints              (basket, order, catalog)
-                   exposed via cartridge or PWA Kit)
-                          │
-                          └──►  Merchant's existing PSP
-                                (Stripe, Adyen, CyberSource, MPP, x402, …)
+cart                ✓
+checkout            ✓  (hands off to SFRA checkout)
+catalogSearch       ✓
+catalogLookup       ✓
+order               ✓  (single-order lookup; listOrders is v0.3 — needs Data API)
+inventoryRealtime   ✓
+refunds             —  v0.3
+disputes            —  v0.3
+webhooks            —  v0.3
 ```
 
-## Status
+## Quickstart (Docker)
 
-- 🚧 **Scaffold** — README + LICENSE only. Highest engineering investment of the first-party set (proprietary B2C Commerce scripting). Largest per-install commercial value (enterprise buyers); slowest procurement cycles.
-- Track progress and adjacent platforms in the [awesome-agentic-commerce](https://github.com/xpaysh/awesome-agentic-commerce) registry.
+```bash
+git clone https://github.com/xpaysh/agentic-commerce-for-salesforce-commerce.git
+cd agentic-commerce-for-salesforce-commerce
+cp .env.example .env
+# Fill in XPAY_MERCHANT_SLUG, SITE_URL, XPAY_API_KEY,
+# SFCC_INSTANCE, SFCC_SITE_ID, SFCC_CLIENT_ID, SFCC_CLIENT_SECRET
 
-## See also
+docker compose -f examples/docker-compose.yml up --build
+```
 
-- [Plugin template](https://github.com/xpaysh/agentic-commerce-plugin-template) — shared TypeScript core
-- [awesome-agentic-commerce](https://github.com/xpaysh/awesome-agentic-commerce) — ecosystem registry
-- [Agentic Commerce for commercetools](https://github.com/xpaysh/agentic-commerce-for-commercetools) · [Agentic Commerce for BigCommerce](https://github.com/xpaysh/agentic-commerce-for-bigcommerce) — sibling scaffolds
-- [ACP vs UCP vs AP2 — Technical Comparison](https://docs.xpay.sh/agentic-commerce-protocols/comparison)
-- [Salesforce B2C Commerce Dev Center](https://developer.salesforce.com/developer-centers/commerce-cloud) · [LINK Marketplace](https://www.salesforce.com/products/commerce-cloud/link/)
+## Manual run
+
+```bash
+npm install
+cp .env.example .env       # fill in
+npm run build
+node --env-file=.env dist/server.js
+```
+
+## Get OCAPI credentials
+
+1. **Account Manager → API Client → Add API Client**
+   - Display name: `xpay agentic commerce`
+   - Generate password (save as `SFCC_CLIENT_SECRET`)
+   - Copy the **API Client ID** → `SFCC_CLIENT_ID`
+   - Default scopes (Open Commerce): `SALESFORCE_COMMERCE_API:tenant_id`
+2. **Business Manager → Administration → Site Development → Open Commerce API Settings → Shop → Configuration**
+   - Add an entry for the client_id you just created, allowlisting the OCAPI Shop resources used by v0.1:
+     ```
+     /products/**
+     /product_search
+     /baskets
+     /baskets/*/items
+     /baskets/*/items/*
+     /baskets/*/shipments/*/shipping_address
+     /orders/*
+     ```
+3. **Find your instance + site id:**
+   - `SFCC_INSTANCE` = e.g. `zzzz-aaaa.dx.commercecloud.salesforce.com`
+   - `SFCC_SITE_ID` = e.g. `RefArch` (the channel id under Sites in Business Manager)
+
+## v0.2 roadmap — SFRA cartridge
+
+The Node sidecar handles agent-discovery + cart-handoff, but a native cartridge unlocks two things the sidecar can't:
+
+- Discovery files (`/llms.txt`, JSON-LD on PDPs, agent-card.json) emitted directly by SFCC's request lifecycle so they appear under the merchant's canonical domain without a separate reverse proxy.
+- Order-placement-time attribution: the cartridge hooks `dw.order.OrderMgr` to write the agent-attribution token onto the order so reporting can attribute revenue without backfill.
+
+The cartridge will be Composer-installable via SFCC's standard cartridge upload + assignment flow.
+
+## Architecture
+
+This package is the eighth sibling in the family — completing every platform on the [Phase B + Phase C plan](https://github.com/xpaysh/agentic-commerce-plugin-template):
+
+- [agentic-commerce-for-woocommerce](https://github.com/xpaysh/agentic-commerce-for-woocommerce)
+- [agentic-commerce-for-commercetools](https://github.com/xpaysh/agentic-commerce-for-commercetools)
+- [agentic-commerce-for-bigcommerce](https://github.com/xpaysh/agentic-commerce-for-bigcommerce)
+- [agentic-commerce-for-magento](https://github.com/xpaysh/agentic-commerce-for-magento)
+- [agentic-commerce-for-saleor](https://github.com/xpaysh/agentic-commerce-for-saleor)
+- [agentic-commerce-for-prestashop](https://github.com/xpaysh/agentic-commerce-for-prestashop)
+- [agentic-commerce-for-shopify-app](https://github.com/xpaysh/agentic-commerce-for-shopify-app)
+- [agentic-commerce-for-salesforce-commerce](https://github.com/xpaysh/agentic-commerce-for-salesforce-commerce) — *this repo*
 
 ## License
 
-Apache-2.0.
+Apache-2.0
